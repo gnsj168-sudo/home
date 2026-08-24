@@ -1,0 +1,11 @@
+I am an undergraduate student at Monash University Malaysia studying computer science with a focus on data analysis. My main research interest is micro-expression recognition, which I work on under the supervision of Dr. Leong.
+
+Micro-expressions are involuntary facial movements that last between one twenty-fifth and one fifth of a second. They are difficult to recognise because the motion is subtle, the available datasets are small, and the classes are heavily imbalanced. Most modern approaches use optical flow to capture motion between an onset frame and an apex frame, then feed those flow patches into a deep network. The main public datasets are SMIC, CASME II, and SAMM, and results are usually reported using a composite leave-one-subject-out protocol across all three, measured with UF1 and UAR rather than plain accuracy because of the class imbalance problem.
+
+I replicated HTNet as a baseline for my research. The run took about fifteen hours on Google Colab Pro Plus using an L4 GPU across 800 epochs and 68 leave-one-subject-out folds. My replication reached a composite UF1 of 0.8498 and a UAR of 0.8213, which is roughly one percent below the numbers reported in the original Neurocomputing 2024 paper. That gap sits comfortably inside the five percent replication tolerance the authors mention.
+
+My planned extension is to add a graph convolutional network to HTNet. The idea is to treat optical flow patches as nodes in a motion co-activation graph, with an adaptive adjacency matrix learned during training rather than fixed in advance. Dr. Leong suggested I think about what other information beyond the adjacency matrix and node definition could make the graph construction more principled.
+
+Before this I built an Android application called MedTrack Pro using Jetpack Compose, Room, and Retrofit. It integrated the Gemini API and the OpenFDA API to help users track medication schedules and check drug information.
+
+I am currently building a personal multi-agent platform called Home. It uses FastAPI, Postgres with pgvector, and the Gemini API, with a hand-written agent loop instead of a framework like LangGraph. The first plug-in built on top of it is an internship application agent.
