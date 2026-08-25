@@ -107,3 +107,16 @@ TOOL_IMPLEMENTATIONS = {
     "add_note": add_note,
     "get_current_time": get_current_time,
 }
+
+from plugins import Plugin
+
+CORE_PLUGIN = Plugin(
+    name="core",
+    description="Home's built-in notes and time tools.",
+    schemas=TOOL_SCHEMAS,
+    implementations=TOOL_IMPLEMENTATIONS,
+    prompt_fragment=(
+        "Use search_notes for anything about the user's own work or life. "
+        "Use add_note when they tell you something to remember."
+    ),
+)

@@ -5,7 +5,8 @@ from google import genai
 from google.genai import types
 
 from memory import save_message, load_history
-from tools import TOOL_SCHEMAS, TOOL_IMPLEMENTATIONS
+from plugins import PluginRegistry
+from tools import CORE_PLUGIN
 
 load_dotenv(override=True)
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -13,14 +14,17 @@ client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 MODEL = os.environ.get("MODEL", "gemini-3.6-flash")
 MAX_ITERATIONS = 8
 
-print(f"using model: {MODEL}")
+registry = PluginRegistry()
+registry.register(CORE_PLUGIN)
 
-SYSTEM_PROMPT = """You are Home, a personal assistant for the user.
+BASE_PROMPT = """You are Home, a personal assistant for the user.
 
-You have tools available. Use search_notes whenever the question concerns the
-user's own research, projects, or background — do not answer those from memory.
 When you use retrieved notes, cite the chunk numbers you relied on.
 If the notes contain nothing relevant, say so plainly."""
+
+
+def system_prompt() -> str:
+    return BASE_PROMPT + "\n\n" + registry.prompt_fragments()
 
 
 def run_agent(question: str, conversation_id: str | None = None, verbose: bool = True) -> dict:
@@ -42,8 +46,8 @@ def run_agent(question: str, conversation_id: str | None = None, verbose: bool =
                 model=MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    tools=[types.Tool(function_declarations=TOOL_SCHEMAS)],
+                    system_instruction=system_prompt(),
+                    tools=[types.Tool(function_declarations=registry.schemas())],
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(
                         disable=True
                     ),
@@ -82,7 +86,7 @@ def run_agent(question: str, conversation_id: str | None = None, verbose: bool =
                 print(f"  [iteration {i+1}] calling {name}({args})")
             tool_calls_made.append({"name": name, "args": args})
 
-            fn = TOOL_IMPLEMENTATIONS.get(name)
+            fn = registry.implementations().get(name)
             if fn is None:
                 output = f"Error: no tool named {name}."
             else:
@@ -109,7 +113,9 @@ def run_agent(question: str, conversation_id: str | None = None, verbose: bool =
 
 
 if __name__ == "__main__":
-    convo = "test-session-2"
+    print(f"using model: {MODEL}")
+    print(f"plugins loaded: {registry.loaded()}")
+    convo = "test-session-3"
 
     for q in [
         "what day is it today?",
