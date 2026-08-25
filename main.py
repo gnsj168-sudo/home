@@ -11,7 +11,7 @@ load_dotenv()
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 app = FastAPI(title="Home")
 
-MAX_DISTANCE = 0.5
+MAX_DISTANCE = 0.45
 
 SYSTEM_PROMPT = """You are Home, a personal assistant that answers questions using only the context provided below.
 
