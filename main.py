@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from retrieval import search
 
+from agent import run_agent
+
 load_dotenv()
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 app = FastAPI(title="Home")
@@ -60,3 +62,19 @@ def ask(req: AskRequest):
             for h in hits
         ],
     }
+
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation_id: str = "default"
+
+
+@app.post("/chat")
+def chat(req: ChatRequest):
+    result = run_agent(req.message, conversation_id=req.conversation_id, verbose=False)
+    return {
+        "answer": result["answer"],
+        "tool_calls": result["tool_calls"],
+        "iterations": result["iterations"],
+    }
+

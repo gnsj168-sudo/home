@@ -1,17 +1,19 @@
 import os
+
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from memory import save_message, load_history
 from tools import TOOL_SCHEMAS, TOOL_IMPLEMENTATIONS
 
-from memory import save_message, load_history
-
-load_dotenv()
+load_dotenv(override=True)
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-MODEL = "gemini-3.6-flash"
+MODEL = os.environ.get("MODEL", "gemini-3.6-flash")
 MAX_ITERATIONS = 8
+
+print(f"using model: {MODEL}")
 
 SYSTEM_PROMPT = """You are Home, a personal assistant for the user.
 
@@ -19,6 +21,7 @@ You have tools available. Use search_notes whenever the question concerns the
 user's own research, projects, or background — do not answer those from memory.
 When you use retrieved notes, cite the chunk numbers you relied on.
 If the notes contain nothing relevant, say so plainly."""
+
 
 def run_agent(question: str, conversation_id: str | None = None, verbose: bool = True) -> dict:
     contents = []
@@ -30,23 +33,29 @@ def run_agent(question: str, conversation_id: str | None = None, verbose: bool =
                 types.Content(role=role, parts=[types.Part(text=msg["content"])])
             )
 
-    contents.append(
-        types.Content(role="user", parts=[types.Part(text=question)])
-    )
+    contents.append(types.Content(role="user", parts=[types.Part(text=question)]))
     tool_calls_made = []
 
     for i in range(MAX_ITERATIONS):
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                tools=[types.Tool(function_declarations=TOOL_SCHEMAS)],
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                    disable=True
+        try:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    tools=[types.Tool(function_declarations=TOOL_SCHEMAS)],
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                        disable=True
+                    ),
                 ),
-            ),
-        )
+            )
+        except Exception as e:
+            return {
+                "answer": f"The model is unavailable right now ({type(e).__name__}). Please try again shortly.",
+                "tool_calls": tool_calls_made,
+                "iterations": i + 1,
+                "error": str(e),
+            }
 
         candidate = response.candidates[0]
         parts = candidate.content.parts or []
