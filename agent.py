@@ -7,6 +7,7 @@ from google.genai import types
 from memory import save_message, load_history
 from plugins import PluginRegistry
 from tools import CORE_PLUGIN
+from internship import INTERNSHIP_PLUGIN
 
 load_dotenv(override=True)
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -16,6 +17,7 @@ MAX_ITERATIONS = 8
 
 registry = PluginRegistry()
 registry.register(CORE_PLUGIN)
+registry.register(INTERNSHIP_PLUGIN)
 
 BASE_PROMPT = """You are Home, a personal assistant for the user.
 
@@ -111,18 +113,22 @@ def run_agent(question: str, conversation_id: str | None = None, verbose: bool =
         "iterations": MAX_ITERATIONS,
     }
 
-
 if __name__ == "__main__":
     print(f"using model: {MODEL}")
     print(f"plugins loaded: {registry.loaded()}")
-    convo = "test-session-3"
 
-    for q in [
-        "what day is it today?",
-        "remember that I met Dr. Leong on Friday to discuss the GCN adjacency matrix",
-        "what did I discuss with Dr. Leong?",
-    ]:
-        print(f"\n=== {q} ===")
-        result = run_agent(q, conversation_id=convo)
-        print(result["answer"])
-        print(f"({result['iterations']} iterations, tools: {[t['name'] for t in result['tool_calls']]})")
+    jd = """AI Engineer Intern — Kuala Lumpur
+
+Requirements:
+- Experience building applications with large language models
+- Familiarity with retrieval-augmented generation and vector databases
+- Python and REST API development
+- Kubernetes and distributed systems experience
+- Strong background in computer vision or deep learning research"""
+
+    result = run_agent(
+        f"Here's a job description. Draft resume bullets for it:\n\n{jd}",
+        conversation_id="internship-test",
+    )
+    print("\n" + result["answer"])
+    print(f"\n({result['iterations']} iterations, {len(result['tool_calls'])} tool calls)")
