@@ -100,14 +100,14 @@ def run_agent(question: str, conversation_id: str | None = None, verbose: bool =
 
 
 if __name__ == "__main__":
-    convo = "test-session-1"
+    convo = "test-session-2"
 
     for q in [
-        "what were my HTNet results?",
-        "what was the UAR again?",
-        "and what hardware did I run it on?",
+        "what day is it today?",
+        "remember that I met Dr. Leong on Friday to discuss the GCN adjacency matrix",
+        "what did I discuss with Dr. Leong?",
     ]:
         print(f"\n=== {q} ===")
         result = run_agent(q, conversation_id=convo)
         print(result["answer"])
-        print(f"({result['iterations']} iterations, {len(result['tool_calls'])} tool calls)")
+        print(f"({result['iterations']} iterations, tools: {[t['name'] for t in result['tool_calls']]})")
