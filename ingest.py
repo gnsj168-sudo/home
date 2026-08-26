@@ -41,4 +41,4 @@ def ingest_file(path: str, source_type: str = "text"):
 
 
 if __name__ == "__main__":
-    ingest_file("notes.txt")
+    ingest_file("input/notes.txt")
