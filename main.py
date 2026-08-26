@@ -6,7 +6,7 @@ from google import genai
 from pydantic import BaseModel
 
 from retrieval import search
-
+from fastapi.responses import FileResponse
 from agent import run_agent
 
 load_dotenv()
@@ -29,6 +29,9 @@ Context:
 class AskRequest(BaseModel):
     question: str
 
+@app.get("/")
+def index():
+    return FileResponse("index.html")
 
 @app.get("/health")
 def health():
