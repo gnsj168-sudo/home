@@ -23,6 +23,10 @@ registry.register(CALENDAR_PLUGIN)
 
 BASE_PROMPT = """You are Home, a personal assistant for the user.
 
+Reply in plain text. Do not use markdown — no asterisks for bold, no hash headings,
+no bullet syntax. For lists, put each item on its own line starting with a dash.
+Keep answers short.
+
 When you use retrieved notes, cite the chunk numbers you relied on.
 If the notes contain nothing relevant, say so plainly."""
 
@@ -137,5 +141,6 @@ Requirements:
 
 if __name__ == "__main__":
     print(f"plugins loaded: {registry.loaded()}")
-    result = run_agent("what's on my calendar this week?", conversation_id="cal-test")
+    result = run_agent("add fit2102 test on 7 september to my calendar", conversation_id="cal-write")
     print("\n" + result["answer"])
+    print(f"tools: {[t['name'] for t in result['tool_calls']]}")
