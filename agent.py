@@ -8,6 +8,7 @@ from memory import save_message, load_history
 from plugins import PluginRegistry
 from tools import CORE_PLUGIN
 from internship import INTERNSHIP_PLUGIN
+from calendar_plugin import CALENDAR_PLUGIN
 
 load_dotenv(override=True)
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -18,6 +19,7 @@ MAX_ITERATIONS = 8
 registry = PluginRegistry()
 registry.register(CORE_PLUGIN)
 registry.register(INTERNSHIP_PLUGIN)
+registry.register(CALENDAR_PLUGIN)
 
 BASE_PROMPT = """You are Home, a personal assistant for the user.
 
@@ -132,3 +134,8 @@ Requirements:
     )
     print("\n" + result["answer"])
     print(f"\n({result['iterations']} iterations, {len(result['tool_calls'])} tool calls)")
+
+if __name__ == "__main__":
+    print(f"plugins loaded: {registry.loaded()}")
+    result = run_agent("what's on my calendar this week?", conversation_id="cal-test")
+    print("\n" + result["answer"])

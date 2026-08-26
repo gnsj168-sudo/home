@@ -11,7 +11,7 @@ client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
     register_vector(conn)
 
-        conn.execute("""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS chunks (
             id SERIAL PRIMARY KEY,
             content TEXT NOT NULL,
