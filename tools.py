@@ -62,9 +62,9 @@ TOOL_SCHEMAS = [
     {
         "name": "search_notes",
         "description": (
-            "Search the user's personal notes and documents for information about "
-            "their research, projects, coursework, or background. Use this whenever "
-            "the question refers to the user's own work or life."
+                "Search the user's ingested documents and saved notes stored in Home's "
+                "own knowledge base. This does NOT include Notion, which is a separate "
+                "live source. Use for background on their research, projects, and history."
         ),
         "parameters": {
             "type": "object",

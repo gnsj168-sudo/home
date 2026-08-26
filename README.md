@@ -3,9 +3,14 @@
 A personal assistant platform with retrieval over my own notes, a hand-written
 tool-calling loop, and a plug-in interface for adding new capabilities.
 
-Three plug-ins run on it today: **core** (notes and time), **calendar** (read and
-write Google Calendar), and **internship** (tailors job applications to real,
-retrieved experience — and reports the gaps instead of inventing them).
+Four plug-ins run on it today:
+
+| Plug-in | Tools |
+|---|---|
+| **core** | `search_notes`, `add_note`, `get_current_time` |
+| **calendar** | `list_events`, `create_event` |
+| **notion** | `search_notion`, `read_notion_page`, `create_notion_page` |
+| **internship** | `match_profile` |
 
 ---
 
@@ -35,15 +40,13 @@ of the loop here is code I can walk through and explain.
                         |                     |
                  plug-in registry        Gemini API
                         |
-        +---------------+---------------+
-        |               |               |
-      core          calendar        internship
-  search_notes    list_events      match_profile
-  add_note        create_event
-  get_current_time
-        |               |               |
-        |    Google Calendar API        |
-        +---------------+---------------+
+        +-------+-------+-------+-------+
+        |       |       |               |
+      core   calendar  notion      internship
+        |       |       |               |
+        |   Calendar   Notion           |
+        |     API       API             |
+        +-------+---------------+-------+
                         |
              retrieval -> Postgres + pgvector
 ```
@@ -63,8 +66,8 @@ The model never executes anything. It requests; this code decides and runs.
 ## Design decisions
 
 **RAG for stable data, live API calls for volatile data.**
-Notes and documents are chunked and embedded — they're large, stable, and benefit
-from semantic search. Calendar data is fetched live on every query and never
+Notes and documents are chunked and embedded — large, stable, and helped by semantic
+search. Calendar and Notion content is fetched live on every query and never
 embedded: it changes constantly, so an embedded copy would go stale immediately and
 retrieve last week's schedule with full confidence. Getting this split wrong is a
 quiet failure, because stale retrieval looks exactly like fresh retrieval.
@@ -88,7 +91,7 @@ explicit and traceable.
 **A plug-in is only two things:** tools it contributes, and a system-prompt fragment
 saying when to use them. Everything else — retrieval, the loop, persistence, error
 handling — it inherits. Home's own tools are registered as the `core` plug-in through
-the same interface, so the built-in case isn't a special case. Adding the calendar
+the same interface, so the built-in case isn't a special case. Adding the Notion
 plug-in was one import and one `register()` call.
 
 **Tools are for capabilities the model lacks.**
@@ -96,10 +99,22 @@ The internship plug-in has one tool, not three. Parsing a job description and wr
 bullets are things the model already does; only `match_profile` touches the database,
 so only it needs to exist. The rest is prompt.
 
-**Least-privilege OAuth scopes.**
-Calendar access started as `calendar.readonly` and moved to `calendar.events` only
-when writing was added. The app cannot delete calendars or read anything outside
-events.
+**Discovery tools, because ids aren't guessable.**
+Notion pages are UUIDs the model cannot invent, so `search_notion` exists purely to
+hand it a real id before `read_notion_page` or `create_notion_page` can run. The
+model chains them on its own; nothing in the code links the two calls.
+
+**Least-privilege scopes.**
+Calendar started at `calendar.readonly` and moved to `calendar.events` only when
+writing was added. The Notion connection is an internal access token that sees
+nothing until specific pages are shared with it — a narrower model than Calendar's
+all-or-nothing scope.
+
+**Provenance on everything written.**
+Calendar events created by Home carry an "Added by Home" marker in their description,
+and `list_events` labels them on the way back out. Notion pages get a "Created by
+Home" line. Agent-written chunks are stored with `source='home-agent'`. In every
+case I can tell later what I wrote and what the agent did.
 
 **Provider-agnostic conversation storage.**
 History is stored as plain user/assistant text, not SDK objects. Tool calls are
@@ -118,10 +133,10 @@ results bunched at 0.45–0.52. Similarity search always returns *k* results —
 cannot say "I don't know", so the threshold says it instead.
 
 **Plain-text output instead of rendered markdown.**
-Model output flows into the browser alongside retrieved chunks and calendar events —
-text I didn't write. Rendering it as HTML is an injection surface that needs a
-sanitiser, not just a parser. The system prompt asks for plain text instead: no new
-dependency, no new attack surface.
+Model output flows into the browser alongside retrieved chunks, calendar events, and
+Notion content — text I didn't write. Rendering it as HTML is an injection surface
+that needs a sanitiser, not just a parser. The system prompt asks for plain text
+instead: no new dependency, no new attack surface.
 
 ---
 
@@ -132,24 +147,23 @@ citations. Asked "what is the capital of France?", it returns nothing — the mo
 knows, but the context doesn't contain it, and the guard rejects the query before the
 API call.
 
-**Multi-tool dispatch across plug-ins.** The model selects among tools from every
-registered plug-in based on their descriptions alone.
+**Multi-tool dispatch across plug-ins.** The model selects among nine tools from four
+plug-ins based on their descriptions alone.
 
-**Tool chaining.** Asked "what's on my calendar this week?", the model calls
-`get_current_time` (core plug-in) to learn today's date, then `list_events` (calendar
-plug-in) with real computed dates. Nothing in the code links those two tools — the
-chaining comes out of the loop.
+**Tool chaining.** "What's on my calendar this week?" calls `get_current_time` (core)
+to learn today's date, then `list_events` (calendar) with real computed dates.
+"What's in my Notion?" calls `search_notion` for an id, then `read_notion_page`.
+Nothing in the code links those pairs — the chaining comes out of the loop.
 
 **Self-extending knowledge.** `add_note` chunks, embeds, and stores new information
-through the same pipeline as file ingestion, tagged `source_type='note'`. The agent
-writes to its own knowledge base and retrieves from it in later turns.
+through the same pipeline as file ingestion. The agent writes to its own knowledge
+base and retrieves from it in later turns.
 
 **Conversation memory.** Follow-ups resolve against history — "and what hardware did I
 run it on?" becomes a search for the subject established two turns earlier.
 
-**Calendar writes with provenance.** Events created by Home carry an "Added by Home"
-marker in their description, so they're distinguishable from manually created ones in
-any calendar client, and `list_events` labels them on the way back out.
+**Calendar and Notion writes**, both marked with their origin, both reachable in plain
+language: "add fit2102 test on 7 September", "create a Notion page called X".
 
 **Duplicate detection.** `create_event` checks the target day before writing. On a
 match it refuses and explains, and the model asks the user; confirming re-calls the
@@ -163,17 +177,28 @@ than fabricating it.
 
 ---
 
-## A bug worth recording
+## Three bugs worth recording
 
-Before `create_event` existed, asking Home to "add fit2102 test on 7 September"
-produced: *"I have saved a note about your fit2102 test on 7 September."*
+**A missing capability degrades into the wrong capability.**
+Before `create_event` existed, "add fit2102 test on 7 September" produced: *"I have
+saved a note about your fit2102 test on 7 September."* With no calendar write tool,
+the model reached for the nearest thing it had — `add_note` — and reported success.
+Silent, plausible-sounding, wrong. Fixed with the tool plus an explicit instruction in
+the plug-in's prompt fragment.
 
-It had no calendar write tool, so it reached for the nearest thing it did have —
-`add_note` — and reported success. The failure was silent and plausible-sounding,
-which is the dangerous combination. **A missing capability degrades into the wrong
-capability, confidently.** The fix was the tool plus an explicit instruction in the
-plug-in's prompt fragment: when the user asks to schedule something, use
-`create_event`, never `add_note`.
+**Overlapping tool descriptions cause silent mis-dispatch.**
+After adding Notion, "what's my to-do list?" kept returning results from the embedded
+notes, because `search_notes` was described as searching "the user's notes" — and
+Notion is also notes. The model never errored; it picked one source and answered
+confidently. Fixed by narrowing the core tool's description to exclude Notion
+explicitly, and adding routing guidance to the base prompt. Same shape as the first
+bug: as plug-ins accumulate, tool descriptions become a namespace that needs managing.
+
+**The model can return no text at all.**
+`response.text` came back `None` on a response with no text part, and the null landed
+in a NOT NULL column — the database constraint is what surfaced it, several turns
+later. The loop had assumed that "no function call" implies "has text". Now guarded at
+the boundary where model output meets storage.
 
 ---
 
@@ -188,6 +213,7 @@ plug-in's prompt fragment: when the user asks to schedule something, use
 | Store | Postgres (Neon) + pgvector |
 | Driver | psycopg 3 |
 | Calendar | Google Calendar API, OAuth desktop flow |
+| Notion | Notion API, internal connection token |
 
 ---
 
@@ -205,6 +231,8 @@ Create `.env`:
 DATABASE_URL=postgresql://...
 GEMINI_API_KEY=...
 MODEL=gemini-3.6-flash
+NOTION_TOKEN=ntn_...
+NOTION_PARENT_PAGE_ID=...
 ```
 
 Set up the schema, add notes, ingest:
@@ -215,8 +243,10 @@ mkdir input && cp notes.example.txt input/notes.txt
 python ingest.py
 ```
 
-For the calendar plug-in, add an OAuth desktop client's `credentials.json` to the
-project root. First run opens a browser for consent and writes `token.json`.
+For the calendar plug-in, put an OAuth desktop client's `credentials.json` in the
+project root; the first run opens a browser for consent and writes `token.json`. For
+Notion, create an internal connection and share at least one page with it — the
+integration sees nothing until you do.
 
 ```bash
 uvicorn main:app --reload --port 8080
@@ -231,6 +261,7 @@ Then `http://localhost:8080`.
 ## Example
 
 <!-- PASTE TERMINAL OUTPUT FROM `python agent.py` HERE -->
+<!-- best demo: "what's on my calendar this week?" - shows cross-plugin chaining -->
 
 ```
 ```
@@ -248,6 +279,7 @@ Then `http://localhost:8080`.
 | `plugins.py` | Plug-in dataclass and registry with name-collision detection |
 | `tools.py` | Core tools, registered as the `core` plug-in |
 | `calendar_plugin.py` | Google Calendar plug-in |
+| `notion_plugin.py` | Notion plug-in |
 | `internship.py` | Internship plug-in |
 | `agent.py` | The tool-calling loop |
 | `main.py` | FastAPI endpoints |
@@ -258,31 +290,31 @@ Then `http://localhost:8080`.
 ## Known limitations
 
 - **Chunking splits mid-word.** Paragraph-first, then a hard character split.
-  Sentence-boundary splitting would be better; this was measured as good enough
-  before optimising.
+  Sentence-boundary splitting would be better; measured as good enough before
+  optimising.
 - **Duplicate detection is a substring match.** "FIT2102 test" won't match "fit2102
   exam", and it only checks the target day.
 - **No true human-in-the-loop confirmation.** Tools refuse and explain rather than
   pausing for approval; real approval needs pending-action state across turns.
-- **The agent over-searches.** It sometimes calls `search_notes` for information
-  already in conversation history, preferring to verify against sources. Correct but
-  not cheap.
+- **Tool routing is prompt-level.** Source disambiguation lives in descriptions and
+  the base prompt, not in code. It works, but it degrades as tools accumulate.
+- **The agent over-searches — and sometimes under-searches.** It will re-query a
+  source for something already in conversation history, and occasionally answer from
+  history when it should re-query. Both failure directions are live.
 - **Grounding constrains, it doesn't prevent.** Output stays close to retrieved
   content but can still infer past it — one drafted bullet named a framework implied
   by the notes rather than stated in them.
 - **No vector index.** At current scale Postgres scans every row in microseconds.
   Past ~100k chunks this needs an HNSW index.
-- **History is truncated, not summarised.** Turns beyond the limit are dropped rather
-  than compressed.
+- **History is truncated, not summarised.** Turns beyond the limit are dropped.
 - **Single user.** No auth; conversation IDs are unauthenticated strings.
 
 ---
 
 ## Roadmap
 
-- Obsidian vault ingestion — markdown files through the existing chunk/embed pipeline
-- Multimodal ingestion — voice memos and images via transcription and captioning
-  adapters in front of the unchanged pipeline
+- Multimodal input — images and voice memos through captioning and transcription
+  adapters in front of the unchanged chunk/embed pipeline
 - Mobile client
 - Pending-action state for real confirmation flows
 - Smarter iteration budget — cap total tool calls rather than loop turns, so parallel
