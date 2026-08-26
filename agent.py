@@ -9,6 +9,7 @@ from plugins import PluginRegistry
 from tools import CORE_PLUGIN
 from internship import INTERNSHIP_PLUGIN
 from calendar_plugin import CALENDAR_PLUGIN
+from notion_plugin import NOTION_PLUGIN
 
 load_dotenv(override=True)
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -20,6 +21,7 @@ registry = PluginRegistry()
 registry.register(CORE_PLUGIN)
 registry.register(INTERNSHIP_PLUGIN)
 registry.register(CALENDAR_PLUGIN)
+registry.register(NOTION_PLUGIN)
 
 BASE_PROMPT = """You are Home, a personal assistant for the user.
 
@@ -74,7 +76,7 @@ def run_agent(question: str, conversation_id: str | None = None, verbose: bool =
         function_calls = [p.function_call for p in parts if p.function_call]
 
         if not function_calls:
-            answer = response.text
+            answer = response.text or "I wasn't able to produce an answer for that."
             if conversation_id:
                 save_message(conversation_id, "user", question)
                 save_message(conversation_id, "assistant", answer, tool_calls_made)
@@ -140,7 +142,11 @@ Requirements:
     print(f"\n({result['iterations']} iterations, {len(result['tool_calls'])} tool calls)")
 
 if __name__ == "__main__":
-    print(f"plugins loaded: {registry.loaded()}")
-    result = run_agent("add fit2102 test on 7 september to my calendar", conversation_id="cal-write")
-    print("\n" + result["answer"])
-    print(f"tools: {[t['name'] for t in result['tool_calls']]}")
+    r = run_agent(
+        "create a notion page called Home test with a short note saying this was written by my agent",
+        conversation_id="notion-write",
+    )
+    print(r["answer"])
+    print(f"tools: {[t['name'] for t in r['tool_calls']]}")
+
+    
